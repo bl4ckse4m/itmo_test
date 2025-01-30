@@ -28,7 +28,5 @@ async def setup_logger():
     stream_handler.formatter = formatter
     logger.add_handler(file_handler)
     logger.add_handler(stream_handler)
-
     logger.level = LogLevel.INFO
-
     return logger
