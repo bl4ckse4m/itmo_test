@@ -52,6 +52,9 @@ async def log_requests(request: Request, call_next):
         media_type=response.media_type,
     )
 
+@app.get('/')
+def test():
+    return 'Working!'
 
 @app.post("/api/request", response_model=PredictionResponse)
 def predict(body: PredictionRequest):

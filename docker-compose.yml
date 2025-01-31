@@ -8,6 +8,8 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
+    volumes:
+      - ./.store:/app/.store
 
   fastapi-service:
     build: .
@@ -21,6 +23,7 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY}
     volumes:
       - ./logs:/app/logs
+      - ./.store:/app/.store
     depends_on:
       scraping:
         condition: service_completed_successfully
