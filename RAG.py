@@ -10,9 +10,11 @@ from typing_extensions import List, TypedDict
 
 from langchain_core.output_parsers import PydanticOutputParser
 import store
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, TAVILY_API_KEY
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.retrievers import TavilySearchAPIRetriever
+from langgraph.graph import END
 # Define prompt for question-answering
 prompt = hub.pull("rlm/rag-prompt")
 
@@ -20,6 +22,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
 
 
+tavily = TavilySearchAPIRetriever(k=3, api_key=TAVILY_API_KEY)
 
 llm = ChatOpenAI(api_key=OPENAI_API_KEY, model="gpt-4o-mini")
 
@@ -36,13 +39,15 @@ class State(TypedDict):
 class Result(BaseModel):
     """Answer to user query."""
 
-    answer: str | None = Field(..., description="""
+    answer: int | None = Field(..., description="""
     Numeric value representing the correct answer if question is a multiple choice question. 
     If question is not a multiple choice question, the value should be null.""")
     reasoning: str = Field(
         ..., description="""Contains explanation or additional information about the answer."""
     )
-
+    dont_know: bool = Field(
+        ..., description="""Indicates that context is not enough to answer the question or the model is not sure about the answer."""
+    )
 
 
 # Define application steps
@@ -50,6 +55,9 @@ def retrieve(state: State):
     retrieved_docs = vector_store.similarity_search(state["question"])
     return {"context": retrieved_docs}
 
+
+def websearch(state:State):
+   return {'context': tavily.invoke(state["question"])}
 
 def generate(state: State):
     parser = PydanticOutputParser(pydantic_object=Result)
@@ -80,13 +88,30 @@ Use the following context while answering the question:
 
 
     messages = prompt.invoke({"question": state["question"], "context": docs_content})
-    response = llm.invoke(messages)
-    return {"answer": response.content}
+    output = llm.invoke(messages)
+    return {'answer' :  parser.invoke(output)}
 
+
+def is_rag_dont_know(state: State) -> str:
+    # Check if RAG result is good enough (replace with actual logic)
+    return  'websearch' if state['answer'].dont_know else END
 
 # Compile application and test
-graph_builder = StateGraph(State).add_sequence([retrieve, generate])
+graph_builder = StateGraph(State)
+graph_builder.add_node("retrieve", retrieve)
+graph_builder.add_node("websearch", websearch)
+graph_builder.add_node("generate", generate)
+graph_builder.add_node("generate1", generate)
+
+
 graph_builder.add_edge(START, "retrieve")
+graph_builder.add_edge("retrieve", "generate")
+graph_builder.add_conditional_edges(
+    'generate', is_rag_dont_know
+)
+graph_builder.add_edge("websearch", "generate1")
+graph_builder.add_edge("generate1", END)
+
 graph = graph_builder.compile()
 
 def answer(query: str):
