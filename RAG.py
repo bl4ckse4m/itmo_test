@@ -74,6 +74,8 @@ The user may ask two kinds of questions:
 *  a questions with enumerated list of answer options that you should answer with the number
 *  a generic question that you should answer with a short text in reasoning field  
 
+You should provide the reasoning for your answer explaining why your answer is correct.
+
 Use the following context while answering the question:
 
 {context}
