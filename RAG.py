@@ -46,7 +46,7 @@ class Result(BaseModel):
         ..., description="""Contains explanation or additional information about the answer."""
     )
     dont_know: bool = Field(
-        ..., description="""Indicates that context is not enough to answer the question or the model is not sure about the answer."""
+        ..., description="""Indicates that context does not contain the answer to the question"""
     )
 
 
@@ -89,7 +89,7 @@ Use the following context while answering the question:
 
     messages = prompt.invoke({"question": state["question"], "context": docs_content})
     output = llm.invoke(messages)
-    return {'answer' :  parser.invoke(output)}
+    return {'answer' :  parser.invoke(output.content)}
 
 
 def is_rag_dont_know(state: State) -> str:
@@ -113,6 +113,8 @@ graph_builder.add_edge("websearch", "generate1")
 graph_builder.add_edge("generate1", END)
 
 graph = graph_builder.compile()
+
+#  [d.metadata['source'] for d in  state['context']]
 
 def answer(query: str):
     result = graph.invoke({"question": query})
