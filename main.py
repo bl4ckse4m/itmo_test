@@ -67,7 +67,7 @@ def predict(body: PredictionRequest):
         response = PredictionResponse(
             id=body.id,
             answer=answer.answer,
-            reasoning=answer.reasoning,
+            reasoning=RAG.ai_model+': '+answer.reasoning,
             sources=sources,
         )
         log.info(f"Successfully processed request {body.id}")
