@@ -1,4 +1,5 @@
 import argparse
+import logging
 
 from langchain import hub
 from langchain_core.documents import Document
@@ -15,12 +16,15 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.retrievers import TavilySearchAPIRetriever
 from langgraph.graph import END
+
+from utils.logger import setup_logging
+
 # Define prompt for question-answering
 prompt = hub.pull("rlm/rag-prompt")
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
-
+log = logging.getLogger(__name__)
 
 tavily = TavilySearchAPIRetriever(k=3, api_key=TAVILY_API_KEY)
 
@@ -52,12 +56,17 @@ class Result(BaseModel):
 
 # Define application steps
 def retrieve(state: State):
-    retrieved_docs = vector_store.similarity_search(state["question"])
+    question = state["question"]
+    log.info(f'Retrieving documents for question: {question}')
+    retrieved_docs = vector_store.similarity_search(question)
     return {"context": retrieved_docs}
 
 
-def websearch(state:State):
-   return {'context': tavily.invoke(state["question"])}
+def websearch(state: State):
+    question = state["question"]
+    log.info(f'Searching web for question: {question}')
+    return {'context': tavily.invoke(state["question"])}
+
 
 def generate(state: State):
     parser = PydanticOutputParser(pydantic_object=Result)
@@ -87,16 +96,15 @@ Use the following context while answering the question:
         ]
     ).partial(format_instructions=parser.get_format_instructions())
 
-
-
     messages = prompt.invoke({"question": state["question"], "context": docs_content})
     output = llm.invoke(messages)
-    return {'answer' :  parser.invoke(output.content)}
+    return {'answer': parser.invoke(output.content)}
 
 
 def is_rag_dont_know(state: State) -> str:
     # Check if RAG result is good enough (replace with actual logic)
-    return  'websearch' if state['answer'].dont_know else END
+    return 'websearch' if state['answer'].dont_know else END
+
 
 # Compile application and test
 graph_builder = StateGraph(State)
@@ -104,7 +112,6 @@ graph_builder.add_node("retrieve", retrieve)
 graph_builder.add_node("websearch", websearch)
 graph_builder.add_node("generate", generate)
 graph_builder.add_node("generate1", generate)
-
 
 graph_builder.add_edge(START, "retrieve")
 graph_builder.add_edge("retrieve", "generate")
@@ -116,7 +123,7 @@ graph_builder.add_edge("generate1", END)
 
 graph = graph_builder.compile()
 
-#  [d.metadata['source'] for d in  state['context']]
+
 
 def answer(query: str):
     result = graph.invoke({"question": query})
@@ -124,6 +131,7 @@ def answer(query: str):
 
 
 if __name__ == "__main__":
+    setup_logging()
 
     # Create an ArgumentParser object parser = argparse.ArgumentParser(description="Query processor")
     parser = argparse.ArgumentParser(description="Answer question about ITMO")
@@ -135,4 +143,4 @@ if __name__ == "__main__":
 
     # Print the query value
     result = answer(args.query)
-    print(result["answer"])
+    log.info(result["answer"])

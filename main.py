@@ -1,20 +1,24 @@
+import logging
 import time
-from typing import List
+from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import HttpUrl
+
+import RAG
 from schemas.request import PredictionRequest, PredictionResponse
-from utils.logger import setup_logger
+from utils.logger import setup_logging
 
-# Initialize
-app = FastAPI()
-logger = None
+log = logging.getLogger(__name__)
 
 
-@app.on_event("startup")
-async def startup_event():
-    global logger
-    logger = await setup_logger()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -22,7 +26,7 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
 
     body = await request.body()
-    await logger.info(
+    log.info(
         f"Incoming request: {request.method} {request.url}\n"
         f"Request body: {body.decode()}"
     )
@@ -34,7 +38,7 @@ async def log_requests(request: Request, call_next):
     async for chunk in response.body_iterator:
         response_body += chunk
 
-    await logger.info(
+    log.info(
         f"Request completed: {request.method} {request.url}\n"
         f"Status: {response.status_code}\n"
         f"Response body: {response_body.decode()}\n"
@@ -50,28 +54,30 @@ async def log_requests(request: Request, call_next):
 
 
 @app.post("/api/request", response_model=PredictionResponse)
-async def predict(body: PredictionRequest):
+def predict(body: PredictionRequest):
+    log.info(f"Processing prediction request with id: {body.id}")
     try:
-        await logger.info(f"Processing prediction request with id: {body.id}")
         # Здесь будет вызов вашей модели
-        answer = 1  # Замените на реальный вызов модели
-        sources: List[HttpUrl] = [
-            HttpUrl("https://itmo.ru/ru/"),
-            HttpUrl("https://abit.itmo.ru/"),
-        ]
-
+        result = RAG.answer(body.query)
+        sources  =  [HttpUrl(d.metadata['source']) for d in  result['context']]
+        answer = result['answer']
         response = PredictionResponse(
             id=body.id,
-            answer=answer,
-            reasoning="Из информации на сайте",
+            answer=answer.answer,
+            reasoning=answer.reasoning,
             sources=sources,
         )
-        await logger.info(f"Successfully processed request {body.id}")
+        log.info(f"Successfully processed request {body.id}")
         return response
     except ValueError as e:
         error_msg = str(e)
-        await logger.error(f"Validation error for request {body.id}: {error_msg}")
+        log.error(f"Validation error for request {body.id}: {error_msg}")
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
-        await logger.error(f"Internal error processing request {body.id}: {str(e)}")
+        log.error(f"Internal error processing request {body.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

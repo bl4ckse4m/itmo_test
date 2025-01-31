@@ -10,6 +10,6 @@ class PredictionRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     id: int
-    answer: int
+    answer: int | None
     reasoning: str
     sources: List[HttpUrl]

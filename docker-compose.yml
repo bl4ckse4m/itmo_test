@@ -1,6 +1,11 @@
 version: "3.8"
 
 services:
+  scraping:
+    build: .
+    container_name: scraping
+    command: python scraping.py
+
   fastapi-service:
     build: .
     container_name: fastapi-baseline
@@ -11,6 +16,9 @@ services:
       - TZ=UTC
     volumes:
       - ./logs:/app/logs
+    depends_on:
+      scraping:
+        condition: service_completed_successfully
     # Если нужно GPU
     # runtime: nvidia
     # deploy:
