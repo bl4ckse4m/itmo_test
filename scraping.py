@@ -32,7 +32,7 @@ def parse_sitemap(sitemap_xml):
             ts = datetime.strptime(date, "%Y-%m-%d").timestamp()
             urls.append((url, ts))
     urls.sort(key=lambda x: x[1], reverse=True)
-    urls = [u[0] for u in urls[:15000]]
+    urls = [u[0] for u in urls[:7000]]
     return urls
 
 
